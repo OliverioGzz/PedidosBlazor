@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36511.14 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PedidosBlazor", "PedidosBlazor\PedidosBlazor\PedidosBlazor.csproj", "{BE4EE40D-D535-4DA4-AB18-A5A562761A08}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PedidosBlazor.Client", "PedidosBlazor\PedidosBlazor.Client\PedidosBlazor.Client.csproj", "{62CC6D22-89F3-4B1C-8914-5867A06133B3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PedidosBlazor.Shared", "PedidosBlazor.Shared\PedidosBlazor.Shared.csproj", "{68F726F0-95B0-470E-9A9F-3A087163E873}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BE4EE40D-D535-4DA4-AB18-A5A562761A08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE4EE40D-D535-4DA4-AB18-A5A562761A08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE4EE40D-D535-4DA4-AB18-A5A562761A08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE4EE40D-D535-4DA4-AB18-A5A562761A08}.Release|Any CPU.Build.0 = Release|Any CPU
+		{62CC6D22-89F3-4B1C-8914-5867A06133B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{62CC6D22-89F3-4B1C-8914-5867A06133B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{62CC6D22-89F3-4B1C-8914-5867A06133B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{62CC6D22-89F3-4B1C-8914-5867A06133B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{68F726F0-95B0-470E-9A9F-3A087163E873}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{68F726F0-95B0-470E-9A9F-3A087163E873}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{68F726F0-95B0-470E-9A9F-3A087163E873}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{68F726F0-95B0-470E-9A9F-3A087163E873}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FE43F62A-65A4-4FAD-859E-138B44FA7E7D}
+	EndGlobalSection
+EndGlobal

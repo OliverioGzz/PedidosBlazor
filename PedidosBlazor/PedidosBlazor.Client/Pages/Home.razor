@@ -1,0 +1,420 @@
+﻿@* .Client Home.razor *@
+
+@page "/"
+@using PedidosBlazor.Shared.Interfaces
+@using PedidosBlazor.Shared.Models
+
+@inject IPlatilloService PlatilloService
+@inject IMesaService IMesaService
+@inject IPedidoService PedidoService
+
+<PageTitle>Home</PageTitle>
+
+<!-- Notification (toast) -->
+@if (!string.IsNullOrEmpty(NotificationMessage))
+{
+    <div class="notification @NotificationClass">
+        @NotificationMessage
+    </div>
+}
+
+<!-- Confirm modal -->
+@if (ShowConfirmModal)
+{
+    <div class="modal-backdrop">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <p>@ConfirmMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => RespondConfirm(false)">Cancelar</button>
+                    <button class="btn btn-primary" @onclick="() => RespondConfirm(true)">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="container">
+    <!-- Panel Pedido -->
+    <div class="panel pedido-panel">
+        <div class="pedido-header">
+            <div class="pedido-titulo">
+                <div class="pedido-actions" style="display:@(TienePedido ? "flex" : "none")">
+                    <button class="limpiar-pedido-btn" @onclick="LimpiarPedido" aria-label="Limpiar pedido">Limpiar Pedido</button>
+                    <button class="pagar-pedido-btn" @onclick="ProcesarPago" disabled="@Pagando">
+                        @(Pagando ? "Procesando..." : "Pagar Pedido")
+                    </button>
+                </div>
+            </div>
+
+            <div class="pedido-info">
+                <div>Mesa: <span>@(MesaSeleccionada?.Numero.ToString() ?? "-")</span></div>
+                <div>Estado: <span>@(MesaSeleccionada?.Estado ?? "-")</span></div>
+                @if (PedidoExistente != null)
+                {
+                    <div>Pedido ID: <span>#@PedidoExistente.Id</span></div>
+                }
+            </div>
+        </div>
+
+        <div class="items-pedido">
+            @if (!ItemsPedidoActual.Any())
+            {
+                <div class="pedido-vacio">
+                    <p>No hay items en el pedido</p>
+                    <p class="instrucciones">Selecciona una mesa y agrega items del menú</p>
+                </div>
+            }
+            else
+            {
+                @for (int i = 0; i < ItemsPedidoActual.Count; i++)
+                {
+                    var item = ItemsPedidoActual[i];
+                    <div class="item-pedido">
+                        <span class="nombre-item">@item.Platillo?.Nombre</span>
+                        <div class="controles-cantidad">
+                            <button @onclick="() => ModificarCantidad(i, item.Cantidad - 1)">-</button>
+                            <span>@item.Cantidad</span>
+                            <button @onclick="() => ModificarCantidad(i, item.Cantidad + 1)">+</button>
+                        </div>
+                        <span class="subtotal">@((item.Platillo?.Precio * item.Cantidad ?? 0).ToString("C2"))</span>
+                        <button class="eliminar-item" @onclick="() => EliminarItem(i)">×</button>
+                    </div>
+                }
+            }
+        </div>
+
+        <div class="total-pedido">
+            Total: @Total.ToString("C2")
+        </div>
+
+        <button class="enviar-pedido-btn"
+                @onclick="EnviarPedido"
+                disabled="@(!TienePedido || MesaSeleccionada == null || Cargando)">
+            @(Cargando ? "Procesando..." : (PedidoExistente != null ? "Actualizar Pedido" : "Enviar Pedido"))
+        </button>
+    </div>
+
+    <!-- Panel Menú -->
+    <div class="panel menu-panel">
+        <div class="menu-header">
+            <button class="@(Vista == Vistas.Mesas ? "active" : "")" @onclick="() => CambiarVista(Vistas.Mesas)">Mesas</button>
+            <button class="@(Vista == Vistas.Menu ? "active" : "")" @onclick="() => CambiarVista(Vistas.Menu)" disabled="@(MesaSeleccionada == null)">Menú</button>
+        </div>
+
+        <div class="menu-content">
+            @if (Vista == Vistas.Mesas)
+            {
+                <div class="grid-mesas">
+                    @foreach (var mesa in Mesas)
+                    {
+                        var m = mesa; // capturar la variable de la iteración
+                        var selected = MesaSeleccionada?.Id == m.Id; // null-safe y claro
+                                                                     <div class="mesa-item @(selected ? "selected" : "") @m.Estado.ToLower()" @onclick="() => SeleccionarMesa(m)">
+                                                                         <div class="numero-mesa">Mesa @m.Numero</div>
+                                                                         <div class="estado-mesa @m.Estado.ToLower()">@m.Estado</div>
+                            @if (selected && PedidoExistente != null)
+                            {
+                                <div class="pedido-activo">Pedido Activo</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+            else if (Vista == Vistas.Menu)
+            {
+                <div class="grid-menu">
+                    @foreach (var p in Platillos)
+                    {
+                        <div class="platillo-item" @onclick="() => AgregarPlatillo(p)">
+                            <h3>@p.Nombre</h3>
+                            <div class="precio">@p.Precio.ToString("C2")</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    // ---------------- CONSTANTES ----------------
+    const int EMPLEADO_ID = 1;
+
+    static class Vistas { public const string Mesas = "mesas"; public const string Menu = "menu"; }
+
+    // ---------------- ESTADO ----------------
+    List<Mesa> Mesas = new();
+    List<Platillo> Platillos = new();
+    List<ItemPedido> ItemsPedidoActual = new();
+    Pedido? PedidoExistente;
+    Mesa? MesaSeleccionada;
+    string Vista = Vistas.Mesas;
+
+    bool Cargando = false;
+    bool Pagando = false;
+
+    bool TienePedido => ItemsPedidoActual.Any();
+    decimal Total => ItemsPedidoActual.Sum(i => i.Platillo?.Precio * i.Cantidad ?? 0);
+
+    // ---------------- Confirm + Notification state ----------------
+    string? NotificationMessage;
+    string NotificationClass = "success";
+    System.Threading.CancellationTokenSource? notificationCts;
+
+    bool ShowConfirmModal = false;
+    string ConfirmMessage = "";
+    TaskCompletionSource<bool>? confirmTcs;
+
+    // ---------------- CICLO DE VIDA ----------------
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarMesas();
+        await CargarPlatillos();
+    }
+
+    // ---------------- CARGA DATOS USANDO SERVICES ----------------
+    async Task CargarMesas()
+    {
+        try
+        {
+            Mesas = await IMesaService.ObtenerTodasAsync() ?? new List<Mesa>();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Error cargando mesas: " + ex);
+            await ShowNotification("Error cargando mesas", isError: true);
+        }
+    }
+
+    async Task CargarPlatillos()
+    {
+        try
+        {
+            Platillos = await PlatilloService.ObtenerTodosAsync() ?? new List<Platillo>();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Error cargando platillos: " + ex);
+            await ShowNotification("Error cargando platillos", isError: true);
+        }
+    }
+
+    async Task CargarPedidoExistente(int mesaId)
+    {
+        try
+        {
+            var pedidos = await PedidoService.ObtenerPorMesaYEstadoAsync(mesaId, "Pendiente");
+            if (pedidos != null && pedidos.Any())
+            {
+                PedidoExistente = pedidos.First();
+                ItemsPedidoActual = await PedidoService.ObtenerItemsPorPedidoIdAsync(PedidoExistente.Id) ?? new List<ItemPedido>();
+            }
+            else
+            {
+                PedidoExistente = null;
+                ItemsPedidoActual = new List<ItemPedido>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Error cargando pedido existente: " + ex);
+            PedidoExistente = null;
+            ItemsPedidoActual = new List<ItemPedido>();
+            await ShowNotification("Error cargando pedido existente", isError: true);
+        }
+    }
+
+    // ---------------- ACCIONES UI ----------------
+    void CambiarVista(string nueva) => Vista = nueva;
+
+    async Task SeleccionarMesa(Mesa mesa)
+    {
+        Console.WriteLine($"SeleccionarMesa llamado para Mesa {mesa.Numero}"); // Verifica en consola del navegador
+        MesaSeleccionada = mesa;
+        await CargarPedidoExistente(mesa.Id);
+        Vista = Vistas.Menu;
+        StateHasChanged();
+    }
+
+    void AgregarPlatillo(Platillo platillo)
+    {
+        if (MesaSeleccionada == null) return;
+
+        var existente = ItemsPedidoActual.FirstOrDefault(i => i.PlatilloId == platillo.Id);
+        if (existente != null)
+        {
+            existente.Cantidad++;
+        }
+        else
+        {
+            ItemsPedidoActual.Add(new ItemPedido
+            {
+                PlatilloId = platillo.Id,
+                Platillo = platillo,
+                Cantidad = 1
+            });
+        }
+        StateHasChanged();
+    }
+
+    void ModificarCantidad(int index, int nuevaCantidad)
+    {
+        if (nuevaCantidad < 1)
+        {
+            EliminarItem(index);
+            return;
+        }
+        if (index >= 0 && index < ItemsPedidoActual.Count)
+            ItemsPedidoActual[index].Cantidad = nuevaCantidad;
+
+        StateHasChanged();
+    }
+
+    void EliminarItem(int index)
+    {
+        if (index >= 0 && index < ItemsPedidoActual.Count)
+            ItemsPedidoActual.RemoveAt(index);
+
+        StateHasChanged();
+    }
+
+    void LimpiarPedido()
+    {
+        ItemsPedidoActual.Clear();
+        PedidoExistente = null;
+        StateHasChanged();
+    }
+
+    // ---------------- ENVIAR / ACTUALIZAR PEDIDO ----------------
+    async Task EnviarPedido()
+    {
+        if (MesaSeleccionada == null || !ItemsPedidoActual.Any())
+        {
+            await ShowNotification("Selecciona una mesa y agrega items al pedido", isError: true);
+            return;
+        }
+
+        Cargando = true;
+        StateHasChanged();
+
+        try
+        {
+            if (PedidoExistente != null)
+            {
+                // Actualizar pedido existente
+                PedidoExistente.Items = ItemsPedidoActual;
+                await PedidoService.ActualizarAsync(PedidoExistente);
+                await ShowNotification("Pedido actualizado exitosamente");
+                await CargarMesas();
+            }
+            else
+            {
+                // Crear nuevo pedido
+                var nuevoPedido = new Pedido
+                {
+                    MesaId = MesaSeleccionada.Id,
+                    EmpleadoId = EMPLEADO_ID,
+                    Estado = "Pendiente",
+                    Fecha = DateTime.Now,
+                    Items = ItemsPedidoActual
+                };
+
+                PedidoExistente = await PedidoService.CrearAsync(nuevoPedido);
+                await ShowNotification("Pedido enviado exitosamente");
+                await CargarMesas();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Error enviando pedido: " + ex);
+            await ShowNotification("Error enviando pedido", isError: true);
+        }
+        finally
+        {
+            Cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    // ---------------- PROCESAR PAGO ----------------
+    async Task ProcesarPago()
+    {
+        if (PedidoExistente == null)
+        {
+            await ShowNotification("No hay un pedido existente para pagar. Primero envía el pedido.", isError: true);
+            return;
+        }
+        if (!ItemsPedidoActual.Any())
+        {
+            await ShowNotification("El pedido está vacío.", isError: true);
+            return;
+        }
+
+        var confirmar = await ShowConfirm("¿Deseas registrar el pago de este pedido?");
+        if (!confirmar) return;
+
+        Pagando = true;
+        StateHasChanged();
+
+        try
+        {
+            PedidoExistente.Estado = "Pagado";
+            PedidoExistente.Items = ItemsPedidoActual;
+            await PedidoService.ActualizarAsync(PedidoExistente);
+
+            await ShowNotification("Pago registrado correctamente.");
+            await CargarMesas();
+            LimpiarPedido();
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Error procesando pago: " + ex);
+            await ShowNotification("Error procesando pago.", isError: true);
+        }
+        finally
+        {
+            Pagando = false;
+            StateHasChanged();
+        }
+    }
+
+    // ---------------- Notification / Confirm implementations ----------------
+    async Task ShowNotification(string message, bool isError = false, int milliseconds = 3000)
+    {
+        notificationCts?.Cancel();
+        notificationCts?.Dispose();
+        notificationCts = new System.Threading.CancellationTokenSource();
+
+        NotificationMessage = message;
+        NotificationClass = isError ? "error" : "success";
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(milliseconds, notificationCts.Token);
+            NotificationMessage = null;
+            StateHasChanged();
+        }
+        catch (TaskCanceledException) { }
+    }
+
+    Task<bool> ShowConfirm(string message)
+    {
+        confirmTcs = new TaskCompletionSource<bool>();
+        ConfirmMessage = message;
+        ShowConfirmModal = true;
+        StateHasChanged();
+        return confirmTcs.Task;
+    }
+
+    void RespondConfirm(bool accepted)
+    {
+        confirmTcs?.TrySetResult(accepted);
+        ShowConfirmModal = false;
+        ConfirmMessage = string.Empty;
+        StateHasChanged();
+    }
+}
