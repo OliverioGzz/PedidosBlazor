@@ -1,3 +1,4 @@
+using Blazored.Toast;
 using Microsoft.EntityFrameworkCore;
 using PedidosBlazor.Components;
 using PedidosBlazor.Data;
@@ -10,6 +11,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents();
+
+builder.Services.AddBlazoredToast();
+
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=Pedidos.db"));

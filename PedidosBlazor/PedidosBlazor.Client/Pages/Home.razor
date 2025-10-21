@@ -1,40 +1,12 @@
-﻿@* .Client Home.razor *@
-
-@page "/"
+﻿@page "/"
 @using PedidosBlazor.Shared.Interfaces
 @using PedidosBlazor.Shared.Models
-
 @inject IPlatilloService PlatilloService
 @inject IMesaService IMesaService
 @inject IPedidoService PedidoService
+@inject IJSRuntime JS
 
 <PageTitle>Home</PageTitle>
-
-<!-- Notification (toast) -->
-@if (!string.IsNullOrEmpty(NotificationMessage))
-{
-    <div class="notification @NotificationClass">
-        @NotificationMessage
-    </div>
-}
-
-<!-- Confirm modal -->
-@if (ShowConfirmModal)
-{
-    <div class="modal-backdrop">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-body">
-                    <p>@ConfirmMessage</p>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="() => RespondConfirm(false)">Cancelar</button>
-                    <button class="btn btn-primary" @onclick="() => RespondConfirm(true)">Aceptar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
 
 <div class="container">
     <!-- Panel Pedido -->
@@ -42,7 +14,7 @@
         <div class="pedido-header">
             <div class="pedido-titulo">
                 <div class="pedido-actions" style="display:@(TienePedido ? "flex" : "none")">
-                    <button class="limpiar-pedido-btn" @onclick="LimpiarPedido" aria-label="Limpiar pedido">Limpiar Pedido</button>
+                    <button class="limpiar-pedido-btn" @onclick="LimpiarPedidoConConfirmacion" aria-label="Limpiar pedido">Limpiar Pedido</button>
                     <button class="pagar-pedido-btn" @onclick="ProcesarPago" disabled="@Pagando">
                         @(Pagando ? "Procesando..." : "Pagar Pedido")
                     </button>
@@ -80,7 +52,7 @@
                             <button @onclick="() => ModificarCantidad(i, item.Cantidad + 1)">+</button>
                         </div>
                         <span class="subtotal">@((item.Platillo?.Precio * item.Cantidad ?? 0).ToString("C2"))</span>
-                        <button class="eliminar-item" @onclick="() => EliminarItem(i)">×</button>
+                        <button class="eliminar-item" @onclick="() => EliminarItemConConfirmacion(i)">×</button>
                     </div>
                 }
             }
@@ -101,7 +73,7 @@
     <div class="panel menu-panel">
         <div class="menu-header">
             <button class="@(Vista == Vistas.Mesas ? "active" : "")" @onclick="() => CambiarVista(Vistas.Mesas)">Mesas</button>
-            <button class="@(Vista == Vistas.Menu ? "active" : "")" @onclick="() => CambiarVista(Vistas.Menu)" disabled="@(MesaSeleccionada == null)">Menú</button>
+            <button class="@(Vista == Vistas.Menu ? "active" : "")" @onclick="() => CambiarVista(Vistas.Menu)">Menú</button>
         </div>
 
         <div class="menu-content">
@@ -110,11 +82,10 @@
                 <div class="grid-mesas">
                     @foreach (var mesa in Mesas)
                     {
-                        var m = mesa; // capturar la variable de la iteración
-                        var selected = MesaSeleccionada?.Id == m.Id; // null-safe y claro
-                                                                     <div class="mesa-item @(selected ? "selected" : "") @m.Estado.ToLower()" @onclick="() => SeleccionarMesa(m)">
-                                                                         <div class="numero-mesa">Mesa @m.Numero</div>
-                                                                         <div class="estado-mesa @m.Estado.ToLower()">@m.Estado</div>
+                        var selected = MesaSeleccionada?.Id == mesa.Id;
+                        <div class="mesa-item @(selected ? "selected" : "") @mesa.Estado.ToLower()" @onclick="() => SeleccionarMesa(mesa)">
+                            <div class="numero-mesa">Mesa @mesa.Numero</div>
+                            <div class="estado-mesa @mesa.Estado.ToLower()">@mesa.Estado</div>
                             @if (selected && PedidoExistente != null)
                             {
                                 <div class="pedido-activo">Pedido Activo</div>
@@ -140,12 +111,16 @@
 </div>
 
 @code {
-    // ---------------- CONSTANTES ----------------
     const int EMPLEADO_ID = 1;
 
     static class Vistas { public const string Mesas = "mesas"; public const string Menu = "menu"; }
 
-    // ---------------- ESTADO ----------------
+    static class EstadosPedido
+    {
+        public const string Pendiente = "Pendiente";
+        public const string Pagado = "Pagado";
+    }
+
     List<Mesa> Mesas = new();
     List<Platillo> Platillos = new();
     List<ItemPedido> ItemsPedidoActual = new();
@@ -159,58 +134,36 @@
     bool TienePedido => ItemsPedidoActual.Any();
     decimal Total => ItemsPedidoActual.Sum(i => i.Platillo?.Precio * i.Cantidad ?? 0);
 
-    // ---------------- Confirm + Notification state ----------------
-    string? NotificationMessage;
-    string NotificationClass = "success";
-    System.Threading.CancellationTokenSource? notificationCts;
-
-    bool ShowConfirmModal = false;
-    string ConfirmMessage = "";
-    TaskCompletionSource<bool>? confirmTcs;
-
-    // ---------------- CICLO DE VIDA ----------------
     protected override async Task OnInitializedAsync()
     {
-        await CargarMesas();
-        await CargarPlatillos();
+        if (PlatilloService != null)
+        {
+            await CargarMesas();
+            await CargarPlatillos();
+        }
     }
 
-    // ---------------- CARGA DATOS USANDO SERVICES ----------------
     async Task CargarMesas()
     {
-        try
-        {
-            Mesas = await IMesaService.ObtenerTodasAsync() ?? new List<Mesa>();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("Error cargando mesas: " + ex);
-            await ShowNotification("Error cargando mesas", isError: true);
-        }
+        try { Mesas = await IMesaService.ObtenerTodasAsync(); }
+        catch { await JS.InvokeVoidAsync("alert", "Error cargando mesas"); }
     }
 
     async Task CargarPlatillos()
     {
-        try
-        {
-            Platillos = await PlatilloService.ObtenerTodosAsync() ?? new List<Platillo>();
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("Error cargando platillos: " + ex);
-            await ShowNotification("Error cargando platillos", isError: true);
-        }
+        try { Platillos = await PlatilloService.ObtenerTodosAsync(); }
+        catch { await JS.InvokeVoidAsync("alert", "Error cargando platillos"); }
     }
 
     async Task CargarPedidoExistente(int mesaId)
     {
         try
         {
-            var pedidos = await PedidoService.ObtenerPorMesaYEstadoAsync(mesaId, "Pendiente");
+            var pedidos = await PedidoService.ObtenerPorMesaYEstadoAsync(mesaId, EstadosPedido.Pendiente);
             if (pedidos != null && pedidos.Any())
             {
                 PedidoExistente = pedidos.First();
-                ItemsPedidoActual = await PedidoService.ObtenerItemsPorPedidoIdAsync(PedidoExistente.Id) ?? new List<ItemPedido>();
+                ItemsPedidoActual = await PedidoService.ObtenerItemsPorPedidoIdAsync(PedidoExistente.Id);
             }
             else
             {
@@ -218,25 +171,21 @@
                 ItemsPedidoActual = new List<ItemPedido>();
             }
         }
-        catch (Exception ex)
+        catch
         {
-            Console.Error.WriteLine("Error cargando pedido existente: " + ex);
             PedidoExistente = null;
             ItemsPedidoActual = new List<ItemPedido>();
-            await ShowNotification("Error cargando pedido existente", isError: true);
+            await JS.InvokeVoidAsync("alert", "Error cargando pedido existente");
         }
     }
 
-    // ---------------- ACCIONES UI ----------------
     void CambiarVista(string nueva) => Vista = nueva;
 
     async Task SeleccionarMesa(Mesa mesa)
     {
-        Console.WriteLine($"SeleccionarMesa llamado para Mesa {mesa.Numero}"); // Verifica en consola del navegador
         MesaSeleccionada = mesa;
         await CargarPedidoExistente(mesa.Id);
         Vista = Vistas.Menu;
-        StateHasChanged();
     }
 
     void AgregarPlatillo(Platillo platillo)
@@ -244,177 +193,110 @@
         if (MesaSeleccionada == null) return;
 
         var existente = ItemsPedidoActual.FirstOrDefault(i => i.PlatilloId == platillo.Id);
-        if (existente != null)
-        {
-            existente.Cantidad++;
-        }
-        else
-        {
-            ItemsPedidoActual.Add(new ItemPedido
-            {
-                PlatilloId = platillo.Id,
-                Platillo = platillo,
-                Cantidad = 1
-            });
-        }
-        StateHasChanged();
+        if (existente != null) existente.Cantidad++;
+        else ItemsPedidoActual.Add(new ItemPedido { PlatilloId = platillo.Id, Platillo = platillo, Cantidad = 1 });
     }
 
     void ModificarCantidad(int index, int nuevaCantidad)
     {
-        if (nuevaCantidad < 1)
+        if (nuevaCantidad < 1) _ = EliminarItemConConfirmacion(index);
+        else if (index >= 0 && index < ItemsPedidoActual.Count) ItemsPedidoActual[index].Cantidad = nuevaCantidad;
+    }
+
+    async Task EliminarItemConConfirmacion(int index)
+    {
+        if (index >= 0 && index < ItemsPedidoActual.Count)
         {
-            EliminarItem(index);
-            return;
+            bool confirmado = await JS.InvokeAsync<bool>("confirm", "¿Deseas eliminar este item del pedido?");
+            if (confirmado) ItemsPedidoActual.RemoveAt(index);
         }
-        if (index >= 0 && index < ItemsPedidoActual.Count)
-            ItemsPedidoActual[index].Cantidad = nuevaCantidad;
-
-        StateHasChanged();
     }
 
-    void EliminarItem(int index)
+    async Task LimpiarPedidoConConfirmacion()
     {
-        if (index >= 0 && index < ItemsPedidoActual.Count)
-            ItemsPedidoActual.RemoveAt(index);
-
-        StateHasChanged();
+        if (!TienePedido) return;
+        bool confirmado = await JS.InvokeAsync<bool>("confirm", "¿Deseas limpiar todo el pedido?");
+        if (confirmado)
+        {
+            ItemsPedidoActual.Clear();
+            PedidoExistente = null;
+        }
     }
 
-    void LimpiarPedido()
-    {
-        ItemsPedidoActual.Clear();
-        PedidoExistente = null;
-        StateHasChanged();
-    }
-
-    // ---------------- ENVIAR / ACTUALIZAR PEDIDO ----------------
     async Task EnviarPedido()
     {
-        if (MesaSeleccionada == null || !ItemsPedidoActual.Any())
+        if (MesaSeleccionada == null || !TienePedido)
         {
-            await ShowNotification("Selecciona una mesa y agrega items al pedido", isError: true);
+            await JS.InvokeVoidAsync("alert", "Selecciona una mesa y agrega items al pedido");
             return;
         }
 
         Cargando = true;
-        StateHasChanged();
 
         try
         {
             if (PedidoExistente != null)
             {
-                // Actualizar pedido existente
                 PedidoExistente.Items = ItemsPedidoActual;
                 await PedidoService.ActualizarAsync(PedidoExistente);
-                await ShowNotification("Pedido actualizado exitosamente");
+                await JS.InvokeVoidAsync("alert", "Pedido actualizado exitosamente");
                 await CargarMesas();
             }
             else
             {
-                // Crear nuevo pedido
                 var nuevoPedido = new Pedido
                 {
                     MesaId = MesaSeleccionada.Id,
                     EmpleadoId = EMPLEADO_ID,
-                    Estado = "Pendiente",
+                    Estado = EstadosPedido.Pendiente,
                     Fecha = DateTime.Now,
                     Items = ItemsPedidoActual
                 };
 
                 PedidoExistente = await PedidoService.CrearAsync(nuevoPedido);
-                await ShowNotification("Pedido enviado exitosamente");
+                await JS.InvokeVoidAsync("alert", "Pedido enviado exitosamente");
                 await CargarMesas();
             }
         }
-        catch (Exception ex)
+        catch
         {
-            Console.Error.WriteLine("Error enviando pedido: " + ex);
-            await ShowNotification("Error enviando pedido", isError: true);
+            await JS.InvokeVoidAsync("alert", "Error enviando pedido");
         }
-        finally
-        {
-            Cargando = false;
-            StateHasChanged();
-        }
+        finally { Cargando = false; }
     }
 
-    // ---------------- PROCESAR PAGO ----------------
     async Task ProcesarPago()
     {
         if (PedidoExistente == null)
         {
-            await ShowNotification("No hay un pedido existente para pagar. Primero envía el pedido.", isError: true);
+            await JS.InvokeVoidAsync("alert", "No hay un pedido existente para pagar. Primero envía el pedido.");
             return;
         }
-        if (!ItemsPedidoActual.Any())
+        if (!TienePedido)
         {
-            await ShowNotification("El pedido está vacío.", isError: true);
+            await JS.InvokeVoidAsync("alert", "El pedido está vacío.");
             return;
         }
 
-        var confirmar = await ShowConfirm("¿Deseas registrar el pago de este pedido?");
-        if (!confirmar) return;
+        bool confirmado = await JS.InvokeAsync<bool>("confirm", "¿Deseas registrar el pago de este pedido?");
+        if (!confirmado) return;
 
         Pagando = true;
-        StateHasChanged();
-
         try
         {
-            PedidoExistente.Estado = "Pagado";
+            PedidoExistente.Estado = EstadosPedido.Pagado;
             PedidoExistente.Items = ItemsPedidoActual;
             await PedidoService.ActualizarAsync(PedidoExistente);
 
-            await ShowNotification("Pago registrado correctamente.");
+            await JS.InvokeVoidAsync("alert", "Pago registrado correctamente.");
             await CargarMesas();
-            LimpiarPedido();
+            ItemsPedidoActual.Clear();
+            PedidoExistente = null;
         }
-        catch (Exception ex)
+        catch
         {
-            Console.Error.WriteLine("Error procesando pago: " + ex);
-            await ShowNotification("Error procesando pago.", isError: true);
+            await JS.InvokeVoidAsync("alert", "Error procesando pago.");
         }
-        finally
-        {
-            Pagando = false;
-            StateHasChanged();
-        }
-    }
-
-    // ---------------- Notification / Confirm implementations ----------------
-    async Task ShowNotification(string message, bool isError = false, int milliseconds = 3000)
-    {
-        notificationCts?.Cancel();
-        notificationCts?.Dispose();
-        notificationCts = new System.Threading.CancellationTokenSource();
-
-        NotificationMessage = message;
-        NotificationClass = isError ? "error" : "success";
-        StateHasChanged();
-
-        try
-        {
-            await Task.Delay(milliseconds, notificationCts.Token);
-            NotificationMessage = null;
-            StateHasChanged();
-        }
-        catch (TaskCanceledException) { }
-    }
-
-    Task<bool> ShowConfirm(string message)
-    {
-        confirmTcs = new TaskCompletionSource<bool>();
-        ConfirmMessage = message;
-        ShowConfirmModal = true;
-        StateHasChanged();
-        return confirmTcs.Task;
-    }
-
-    void RespondConfirm(bool accepted)
-    {
-        confirmTcs?.TrySetResult(accepted);
-        ShowConfirmModal = false;
-        ConfirmMessage = string.Empty;
-        StateHasChanged();
+        finally { Pagando = false; }
     }
 }
