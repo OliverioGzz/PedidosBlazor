@@ -9,7 +9,7 @@ namespace PedidosBlazor.Shared.Interfaces
         Task<List<Pedido>> ObtenerPorMesaYEstadoAsync(int? mesaId, string? estado);
         Task<List<ItemPedido>> ObtenerItemsPorPedidoIdAsync(int pedidoId);
         Task<Pedido> CrearAsync(Pedido pedido);
-        Task ActualizarAsync(Pedido pedido);
+        Task<int> ActualizarAsync(Pedido pedido);
         Task<bool> EliminarAsync(int id);
     }
 

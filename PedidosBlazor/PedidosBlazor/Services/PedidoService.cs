@@ -65,10 +65,10 @@ public class PedidoService : IPedidoService
         return pedido;
     }
 
-    public async Task ActualizarAsync(Pedido pedido)
+    public async Task<int> ActualizarAsync(Pedido pedido)
     {
         _context.Pedidos.Update(pedido);
-        await _context.SaveChangesAsync();
+        return await _context.SaveChangesAsync();
     }
 
     public async Task<bool> EliminarAsync(int id)

@@ -1,4 +1,4 @@
-using Blazored.Toast;
+﻿using Blazored.Toast;
 using Microsoft.EntityFrameworkCore;
 using PedidosBlazor.Components;
 using PedidosBlazor.Data;
@@ -7,13 +7,12 @@ using PedidosBlazor.Shared.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+builder.Services.AddControllers();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents();
 
 builder.Services.AddBlazoredToast();
-
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite("Data Source=Pedidos.db"));
@@ -22,9 +21,22 @@ builder.Services.AddScoped<IPlatilloService, PlatilloService>();
 builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IMesaService, MesaService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(name: "MiCors", policy =>
+    {
+        policy.WithOrigins(
+            "https://localhost:7279",
+            "http://localhost:5278"
+        )
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
@@ -32,14 +44,16 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
+app.UseCors("MiCors");
 app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseAntiforgery();
+
+app.MapControllers();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()

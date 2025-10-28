@@ -5,5 +5,5 @@ public interface IMesaService
 {
     Task<List<Mesa>> ObtenerTodasAsync();
     Task<Mesa?> ObtenerPorIdAsync(int id);
-    Task ActualizarAsync(Mesa mesa);
+    Task<int> ActualizarAsync(Mesa mesa);
 }

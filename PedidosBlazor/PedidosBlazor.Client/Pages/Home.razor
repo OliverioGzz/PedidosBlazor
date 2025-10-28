@@ -1,10 +1,13 @@
 ﻿@page "/"
 @using PedidosBlazor.Shared.Interfaces
 @using PedidosBlazor.Shared.Models
+@using System.Text.Json
 @inject IPlatilloService PlatilloService
 @inject IMesaService IMesaService
 @inject IPedidoService PedidoService
 @inject IJSRuntime JS
+@inject PersistentComponentState AppState
+@implements IDisposable
 
 <PageTitle>Home</PageTitle>
 
@@ -79,30 +82,46 @@
         <div class="menu-content">
             @if (Vista == Vistas.Mesas)
             {
-                <div class="grid-mesas">
-                    @foreach (var mesa in Mesas)
+                <div class="grid-mesas" style="min-height:300px;">
+                    @if (Mesas.Count == 0)
                     {
-                        var selected = MesaSeleccionada?.Id == mesa.Id;
-                        <div class="mesa-item @(selected ? "selected" : "") @mesa.Estado.ToLower()" @onclick="() => SeleccionarMesa(mesa)">
-                            <div class="numero-mesa">Mesa @mesa.Numero</div>
-                            <div class="estado-mesa @mesa.Estado.ToLower()">@mesa.Estado</div>
-                            @if (selected && PedidoExistente != null)
-                            {
-                                <div class="pedido-activo">Pedido Activo</div>
-                            }
-                        </div>
+                        <p>Cargando mesas...</p>
+                    }
+                    else
+                    {
+                        @foreach (var mesa in Mesas)
+                        {
+                            var selected = MesaSeleccionada?.Id == mesa.Id;
+                            <div @key="mesa.Id"
+                                 class="mesa-item @(selected ? "selected" : "") @mesa.Estado.ToLower()"
+                                 @onclick="() => SeleccionarMesa(mesa)">
+                                <div class="numero-mesa">Mesa @mesa.Numero</div>
+                                <div class="estado-mesa @mesa.Estado.ToLower()">@mesa.Estado</div>
+                                @if (selected && PedidoExistente != null)
+                                {
+                                    <div class="pedido-activo">Pedido Activo</div>
+                                }
+                            </div>
+                        }
                     }
                 </div>
             }
             else if (Vista == Vistas.Menu)
             {
-                <div class="grid-menu">
-                    @foreach (var p in Platillos)
+                <div class="grid-menu" style="min-height:300px;">
+                    @if (Platillos.Count == 0)
                     {
-                        <div class="platillo-item" @onclick="() => AgregarPlatillo(p)">
-                            <h3>@p.Nombre</h3>
-                            <div class="precio">@p.Precio.ToString("C2")</div>
-                        </div>
+                        <p>Cargando menú...</p>
+                    }
+                    else
+                    {
+                        @foreach (var p in Platillos)
+                        {
+                            <div class="platillo-item" @onclick="() => AgregarPlatillo(p)">
+                                <h3>@p.Nombre</h3>
+                                <div class="precio">@p.Precio.ToString("C2")</div>
+                            </div>
+                        }
                     }
                 </div>
             }
@@ -134,13 +153,50 @@
     bool TienePedido => ItemsPedidoActual.Any();
     decimal Total => ItemsPedidoActual.Sum(i => i.Platillo?.Precio * i.Cantidad ?? 0);
 
+    private PersistingComponentStateSubscription persistingSubscription;
+
     protected override async Task OnInitializedAsync()
     {
-        if (PlatilloService != null)
+        // Registrar la persistencia del estado
+        persistingSubscription = AppState.RegisterOnPersisting(PersistState);
+
+        Console.WriteLine("Mesas actuales: " + Mesas.Count);
+
+        // Intentar restaurar el estado persistido
+        if (!AppState.TryTakeFromJson<List<Mesa>>("mesas", out var restoredMesas))
         {
             await CargarMesas();
+        }
+        else
+        {
+            Mesas = restoredMesas!;
+        }
+
+        if (!AppState.TryTakeFromJson<List<Platillo>>("platillos", out var restoredPlatillos))
+        {
             await CargarPlatillos();
         }
+        else
+        {
+            Platillos = restoredPlatillos!;
+        }
+    }
+
+    private Task PersistState()
+    {
+        AppState.PersistAsJson("mesas", Mesas);
+        AppState.PersistAsJson("platillos", Platillos);
+        return Task.CompletedTask;
+    }
+
+    void IDisposable.Dispose()
+    {
+        persistingSubscription.Dispose();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Console.WriteLine($"Home OnAfterRender. Mesas.Count={Mesas.Count}, MesaSeleccionada={MesaSeleccionada?.Id}");
     }
 
     async Task CargarMesas()
@@ -151,6 +207,7 @@
 
     async Task CargarPlatillos()
     {
+        Console.WriteLine("Cargando platillos...");
         try { Platillos = await PlatilloService.ObtenerTodosAsync(); }
         catch { await JS.InvokeVoidAsync("alert", "Error cargando platillos"); }
     }
@@ -159,6 +216,7 @@
     {
         try
         {
+            Console.WriteLine($"Cargando pedido existente para mesaId={mesaId}...");
             var pedidos = await PedidoService.ObtenerPorMesaYEstadoAsync(mesaId, EstadosPedido.Pendiente);
             if (pedidos != null && pedidos.Any())
             {
@@ -171,11 +229,11 @@
                 ItemsPedidoActual = new List<ItemPedido>();
             }
         }
-        catch
+        catch (Exception ex)
         {
             PedidoExistente = null;
             ItemsPedidoActual = new List<ItemPedido>();
-            await JS.InvokeVoidAsync("alert", "Error cargando pedido existente");
+            await JS.InvokeVoidAsync("alert", "Error cargando pedido existente: " + ex);
         }
     }
 
@@ -194,7 +252,7 @@
 
         var existente = ItemsPedidoActual.FirstOrDefault(i => i.PlatilloId == platillo.Id);
         if (existente != null) existente.Cantidad++;
-        else ItemsPedidoActual.Add(new ItemPedido { PlatilloId = platillo.Id, Platillo = platillo, Cantidad = 1 });
+        else ItemsPedidoActual.Add(new ItemPedido { PlatilloId = platillo.Id, Cantidad = 1 });
     }
 
     void ModificarCantidad(int index, int nuevaCantidad)
@@ -253,14 +311,19 @@
                     Items = ItemsPedidoActual
                 };
 
+                var pedidoJson = JsonSerializer.Serialize(nuevoPedido, new JsonSerializerOptions { WriteIndented = true });
+
+                await JS.InvokeVoidAsync("console.log", "Pedido JSON:", pedidoJson);
+                await JS.InvokeVoidAsync("console.log", "Pedido objeto:", new { Pedido = nuevoPedido });
+
                 PedidoExistente = await PedidoService.CrearAsync(nuevoPedido);
                 await JS.InvokeVoidAsync("alert", "Pedido enviado exitosamente");
                 await CargarMesas();
             }
         }
-        catch
+        catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", "Error enviando pedido");
+            await JS.InvokeVoidAsync("alert", "Error enviando pedido: " + ex.InnerException);
         }
         finally { Cargando = false; }
     }

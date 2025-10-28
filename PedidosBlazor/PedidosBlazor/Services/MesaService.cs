@@ -23,10 +23,10 @@ public class MesaService : IMesaService
         return await _context.Mesas.FindAsync(id);
     }
 
-    public async Task ActualizarAsync(Mesa mesa)
+    public async Task<int> ActualizarAsync(Mesa mesa)
     {
         _context.Mesas.Update(mesa);
-        await _context.SaveChangesAsync();
+        return await _context.SaveChangesAsync();
     }
 }
 
