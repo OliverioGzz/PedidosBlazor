@@ -1,8 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using PedidosBlazor.Shared.Models;
-using System;
 
 namespace PedidosBlazor.Data;
+
 public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
@@ -15,62 +15,48 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Configurar Mesa
-        modelBuilder.Entity<Mesa>(entity =>
-        {
-            entity.HasIndex(m => m.Numero).IsUnique();
-            entity.Property(m => m.Estado)
-                  .HasConversion<string>()
-                  .HasDefaultValue("Libre");
-        });
+        base.OnModelCreating(modelBuilder);
 
-        // Configurar Pedido
-        modelBuilder.Entity<Pedido>(entity =>
-        {
-            entity.Property(p => p.Estado)
-                  .HasConversion<string>()
-                  .HasDefaultValue("Pendiente");
 
-            entity.HasOne(p => p.Mesa)
-                  .WithMany()
-                  .HasForeignKey(p => p.MesaId);
+        modelBuilder.Entity<Pedido>()
+            .HasOne(p => p.Mesa)
+            .WithMany(m => m.Pedidos)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(p => p.Empleado)
-                  .WithMany()
-                  .HasForeignKey(p => p.EmpleadoId);
-        });
+        modelBuilder.Entity<Pedido>()
+            .HasOne(p => p.Empleado)
+            .WithMany(e => e.Pedidos)
+            .OnDelete(DeleteBehavior.Restrict);
 
-        // Configurar ItemPedido
-        modelBuilder.Entity<ItemPedido>(entity =>
-        {
-            entity.HasOne(ip => ip.Pedido)
-                  .WithMany(p => p.Items)
-                  .HasForeignKey(ip => ip.PedidoId)
-                  .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ItemPedido>()
+            .HasOne(i => i.Platillo)
+            .WithMany()
+            .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(ip => ip.Platillo)
-                  .WithMany()
-                  .HasForeignKey(ip => ip.PlatilloId);
-        });
+        modelBuilder.Entity<ItemPedido>()
+            .HasOne<Pedido>()
+            .WithMany(p => p.Items)
+            .HasForeignKey(i => i.PedidoId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-        // Datos iniciales
+        SeedData(modelBuilder);
+    }
+
+    private void SeedData(ModelBuilder modelBuilder)
+    {
         modelBuilder.Entity<Empleado>().HasData(
-            new Empleado { Id = 1, Nombre = "Mesero Principal", Rol = "Mesero" }
-        );
-
-        modelBuilder.Entity<Platillo>().HasData(
-            new Platillo { Id = 1, Nombre = "Hamburguesa", Precio = 8.99m },
-            new Platillo { Id = 2, Nombre = "Pizza", Precio = 12.50m },
-            new Platillo { Id = 3, Nombre = "Ensalada", Precio = 6.75m },
-            new Platillo { Id = 4, Nombre = "Sopa", Precio = 4.50m }
+            new Empleado { Id = 1, Nombre = "Juan Pérez" }
         );
 
         modelBuilder.Entity<Mesa>().HasData(
-            new Mesa { Id = 1, Numero = 1, Estado = "Libre" },
-            new Mesa { Id = 2, Numero = 2, Estado = "Libre" },
-            new Mesa { Id = 3, Numero = 3, Estado = "Libre" },
-            new Mesa { Id = 4, Numero = 4, Estado = "Libre" },
-            new Mesa { Id = 5, Numero = 5, Estado = "Libre" }
+            new Mesa { Id = 1, Numero = 1, Estado = "Disponible" },
+            new Mesa { Id = 2, Numero = 2, Estado = "Disponible" },
+            new Mesa { Id = 3, Numero = 3, Estado = "Disponible" }
+        );
+
+        modelBuilder.Entity<Platillo>().HasData(
+            new Platillo { Id = 1, Nombre = "Tacos", Precio = 45.00m },
+            new Platillo { Id = 2, Nombre = "Quesadillas", Precio = 35.00m }
         );
     }
 }

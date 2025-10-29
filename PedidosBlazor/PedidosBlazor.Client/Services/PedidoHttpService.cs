@@ -23,7 +23,7 @@ namespace PedidosBlazor.Client.Services
             return await _http.GetFromJsonAsync<Pedido>($"api/pedidoes/{id}");
         }
 
-        public async Task<List<Pedido>> ObtenerPorMesaYEstadoAsync(int mesaId, string estado)
+        public async Task<List<Pedido>> ObtenerPorMesaYEstadoAsync(int? mesaId, string? estado)
         {
             return await _http.GetFromJsonAsync<List<Pedido>>($"api/pedidoes/mesa/{mesaId}/estado/{estado}") ?? new List<Pedido>();
         }
@@ -51,11 +51,6 @@ namespace PedidosBlazor.Client.Services
         {
             var response = await _http.DeleteAsync($"api/pedidoes/{id}");
             return response.IsSuccessStatusCode;
-        }
-
-        public Task<List<Pedido>> ObtenerPorMesaYEstadoAsync(int? mesaId, string? estado)
-        {
-            throw new NotImplementedException();
         }
     }
 }

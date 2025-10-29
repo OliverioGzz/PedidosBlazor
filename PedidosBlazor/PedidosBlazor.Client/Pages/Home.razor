@@ -252,7 +252,7 @@
 
         var existente = ItemsPedidoActual.FirstOrDefault(i => i.PlatilloId == platillo.Id);
         if (existente != null) existente.Cantidad++;
-        else ItemsPedidoActual.Add(new ItemPedido { PlatilloId = platillo.Id, Cantidad = 1 });
+        else ItemsPedidoActual.Add(new ItemPedido { PlatilloId = platillo.Id, Platillo = platillo, Cantidad = 1 });
     }
 
     void ModificarCantidad(int index, int nuevaCantidad)
