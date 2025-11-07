@@ -194,11 +194,6 @@
         persistingSubscription.Dispose();
     }
 
-    protected override void OnAfterRender(bool firstRender)
-    {
-        Console.WriteLine($"Home OnAfterRender. Mesas.Count={Mesas.Count}, MesaSeleccionada={MesaSeleccionada?.Id}");
-    }
-
     async Task CargarMesas()
     {
         try { Mesas = await IMesaService.ObtenerTodasAsync(); }
@@ -207,7 +202,6 @@
 
     async Task CargarPlatillos()
     {
-        Console.WriteLine("Cargando platillos...");
         try { Platillos = await PlatilloService.ObtenerTodosAsync(); }
         catch { await JS.InvokeVoidAsync("alert", "Error cargando platillos"); }
     }
@@ -216,7 +210,6 @@
     {
         try
         {
-            Console.WriteLine($"Cargando pedido existente para mesaId={mesaId}...");
             var pedidos = await PedidoService.ObtenerPorMesaYEstadoAsync(mesaId, EstadosPedido.Pendiente);
             if (pedidos != null && pedidos.Any())
             {
@@ -233,7 +226,7 @@
         {
             PedidoExistente = null;
             ItemsPedidoActual = new List<ItemPedido>();
-            await JS.InvokeVoidAsync("alert", "Error cargando pedido existente: " + ex);
+            await JS.InvokeVoidAsync("alert", "Error cargando pedido existente: " + ex.Message);
         }
     }
 
@@ -308,7 +301,7 @@
                     EmpleadoId = EMPLEADO_ID,
                     Estado = EstadosPedido.Pendiente,
                     Fecha = DateTime.Now,
-                    Items = ItemsPedidoActual
+                    // Items = ItemsPedidoActual
                 };
 
                 var pedidoJson = JsonSerializer.Serialize(nuevoPedido, new JsonSerializerOptions { WriteIndented = true });
@@ -323,7 +316,7 @@
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", "Error enviando pedido: " + ex.InnerException);
+            await JS.InvokeVoidAsync("alert", "Error enviando pedido: " + ex.Message);
         }
         finally { Cargando = false; }
     }
